@@ -35,7 +35,7 @@ targets:
         targets:
           Host: all
   Watch:
-    type: application.watchapp2
+    type: application
     platform: watchOS
     sources: [Watch, Shared]
     settings:
