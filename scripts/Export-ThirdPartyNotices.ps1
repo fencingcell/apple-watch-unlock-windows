@@ -178,6 +178,7 @@ function Add-RustWorkspace {
         $exitCode = $LASTEXITCODE
     } finally { $ErrorActionPreference = $oldPreference }
     if ($exitCode -ne 0) {
+        if (Test-Path -LiteralPath $errorFile) { Get-Content -LiteralPath $errorFile | Write-Warning }
         throw "Offline locked cargo metadata failed for $Workspace (exit $exitCode). Diagnostics are in ignored artifacts/licenses."
     }
     $metadata = ($json -join "`n") | ConvertFrom-Json
