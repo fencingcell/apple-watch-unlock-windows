@@ -1,0 +1,33 @@
+name: Windows authentication probe
+on:
+  workflow_dispatch:
+  push:
+    paths: ['backend/crates/auth/**', 'backend/crates/login-probe/**', 'backend/Cargo.*', 'scripts/Export-ThirdPartyNotices.ps1', '.github/workflows/windows-prototype.yml']
+  pull_request:
+    paths: ['backend/crates/auth/**', 'backend/crates/login-probe/**', 'backend/Cargo.*', 'scripts/Export-ThirdPartyNotices.ps1', '.github/workflows/windows-prototype.yml']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Select stable Rust MSVC
+        run: rustup default stable-x86_64-pc-windows-msvc
+      - name: Test protocol and probe
+        working-directory: backend
+        run: cargo test --locked -p watch-unlock-auth -p watch-login-probe
+      - name: Build prototype only
+        working-directory: backend
+        run: cargo build --locked --release -p watch-login-probe
+      - name: Export probe dependency notices
+        run: ./scripts/Export-ThirdPartyNotices.ps1 -ProbeOnly -TargetTriple x86_64-pc-windows-msvc
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: watch-login-probe-windows-x64
+          path: |
+            backend/target/release/watch-login-probe.exe
+            licenses/THIRD-PARTY-NOTICES.txt
+            licenses/dependencies.json
+          retention-days: 7

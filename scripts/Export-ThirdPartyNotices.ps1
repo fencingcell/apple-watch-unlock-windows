@@ -1,7 +1,10 @@
 [CmdletBinding()]
 param(
     [string]$RustToolsRoot = $env:WATCH_UNLOCK_TOOL_ROOT,
-    [string]$RustToolchain = $env:WATCH_UNLOCK_RUST_TOOLCHAIN
+    [string]$RustToolchain = $env:WATCH_UNLOCK_RUST_TOOLCHAIN,
+    [switch]$ProbeOnly,
+    [ValidateSet('x86_64-pc-windows-gnu', 'x86_64-pc-windows-msvc')]
+    [string]$TargetTriple = 'x86_64-pc-windows-gnu'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -162,10 +165,10 @@ function Add-Package {
 }
 
 function Add-RustWorkspace {
-    param([string]$Workspace, [string[]]$Features = @())
+    param([string]$Workspace, [string[]]$Features = @(), [string]$RootPackage = '')
     $manifest = Join-Path $projectRoot "$Workspace/Cargo.toml"
     $arguments = @($toolchainArguments) + @('metadata', '--format-version', '1', '--offline', '--locked',
-        '--filter-platform', 'x86_64-pc-windows-gnu', '--manifest-path', $manifest)
+        '--filter-platform', $TargetTriple, '--manifest-path', $manifest)
     if ($Features.Count) { $arguments += @('--features', ($Features -join ',')) }
     $errorFile = Join-Path $scratchRoot (($Workspace.Replace('/', '-')) + '-metadata.stderr.log')
     $oldPreference = $ErrorActionPreference
@@ -187,7 +190,11 @@ function Add-RustWorkspace {
     $members = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
     $visited = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
     $pending = New-Object 'Collections.Generic.Queue[string]'
-    foreach ($member in $metadata.workspace_members) { [void]$members.Add($member); $pending.Enqueue($member) }
+    foreach ($member in $metadata.workspace_members) {
+        [void]$members.Add($member)
+        if (-not $RootPackage -or $packages[$member].name -ceq $RootPackage) { $pending.Enqueue($member) }
+    }
+    if ($pending.Count -eq 0) { throw "Workspace root package not found: $RootPackage" }
     while ($pending.Count) {
         $id = $pending.Dequeue()
         if (-not $visited.Add($id)) { continue }
@@ -254,9 +261,13 @@ try {
             $overrides[$key] = $record
         }
     }
-    Add-RustWorkspace 'backend'
-    Add-RustWorkspace 'apps/desktop/src-tauri' @('custom-protocol')
-    Add-NpmProductionPackages
+    if ($ProbeOnly) {
+        Add-RustWorkspace 'backend' -RootPackage 'watch-login-probe'
+    } else {
+        Add-RustWorkspace 'backend'
+        Add-RustWorkspace 'apps/desktop/src-tauri' @('custom-protocol')
+        Add-NpmProductionPackages
+    }
 
     New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
     $keys = [string[]]@($dependencies.Keys)
@@ -267,8 +278,13 @@ try {
 
     $document = New-Object Text.StringBuilder
     [void]$document.Append("WATCH UNLOCK - THIRD-PARTY LICENSE TEXTS`n`n")
-    [void]$document.Append("Generated from locked offline Cargo metadata for x86_64-pc-windows-gnu and installed locked npm production packages.`n")
-    [void]$document.Append("The Cargo graph conservatively includes reachable build and development dependencies. Desktop custom-protocol is enabled.`n")
+    [void]$document.Append("Generated from locked offline Cargo metadata for $TargetTriple.`n")
+    [void]$document.Append("The Cargo graph conservatively includes reachable build and development dependencies.`n")
+    if ($ProbeOnly) {
+        [void]$document.Append("Scope: watch-login-probe and its reachable dependencies; original desktop app excluded.`n")
+    } else {
+        [void]$document.Append("Scope: backend and desktop custom-protocol, plus installed locked npm production packages.`n")
+    }
     [void]$document.Append("Repository workspace members are governed separately by the repository license and are omitted here.`n")
     [void]$document.Append("Original package license expressions are listed without selecting one branch of a dual license.`n")
     [void]$document.Append("License files are reproduced with original notices and copyright statements. Only line endings are normalized.`n")

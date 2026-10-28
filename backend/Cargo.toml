@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/auth", "crates/domain", "crates/watchd", "crates/provider"]
+members = ["crates/auth", "crates/domain", "crates/watchd", "crates/provider", "crates/login-probe"]
 resolver = "2"
 
 [profile.release]

@@ -15,3 +15,15 @@ modifications.
 
 The IRK verification code follows the algorithm used by watch-unlock-linux.
 Third-party trademarks remain the property of their respective owners.
+
+Imported on 2026-10-28 from whyy1/watch-unlock-windows:
+https://github.com/whyy1/watch-unlock-windows
+Revision: 0c16912d633ff0be94c4e99fbfbec32f52722a67
+
+Further prototype modifications for fencingcell/apple-watch-unlock-windows:
+mutually authenticated P-256 requests and approvals, an iPhone host and watchOS
+wrist-authentication app, unsigned cloud device builds, and a separate Windows
+BLE authentication probe/service. These components do not yet submit Windows
+credentials. The original provider is preserved. The derivative remains under
+GNU AGPL version 3; the destination repository's initial placeholder license
+does not replace the upstream license.
