@@ -1,0 +1,51 @@
+name: WatchLogin
+options:
+  xcodeVersion: '26.0'
+  deploymentTarget:
+    iOS: '16.0'
+    watchOS: '9.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGNING_REQUIRED: NO
+    MARKETING_VERSION: '0.1.0'
+    CURRENT_PROJECT_VERSION: 1
+targets:
+  Host:
+    type: application
+    platform: iOS
+    sources: [Host, Shared/Protocol.swift]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.watchlogin.prototype
+        TARGETED_DEVICE_FAMILY: '1'
+        ARCHS: arm64
+    info:
+      path: Host/Info.plist
+      properties:
+        CFBundleDisplayName: Watch Login Test
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+    dependencies:
+      - target: Watch
+        embed: true
+    scheme:
+      build:
+        targets:
+          Host: all
+  Watch:
+    type: application.watchapp2
+    platform: watchOS
+    sources: [Watch, Shared]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.watchlogin.prototype.watch
+        SKIP_INSTALL: YES
+    info:
+      path: Watch/Info.plist
+      properties:
+        CFBundleDisplayName: Login Test
+        WKApplication: true
+        WKCompanionAppBundleIdentifier: org.watchlogin.prototype
+        NSBluetoothAlwaysUsageDescription: Connect to a computer for a fingerprint-confirmed authentication test.

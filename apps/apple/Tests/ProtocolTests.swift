@@ -10,6 +10,7 @@ final class ProtocolTests: XCTestCase {
         var request_hash: String
         var approval_signing_bytes_hex: String
         var watch_private_scalar_hex_SYNTHETIC: String
+        var computer_private_scalar_hex_SYNTHETIC: String
         var watch_public_key: String
         var signed_approval: SignedApproval
         var now_ms: UInt64
@@ -114,5 +115,21 @@ final class ProtocolTests: XCTestCase {
         XCTAssertThrowsError(try gate.consume(expired, peer: peer, now: v.signed_request.request.expires_at_ms))
         let wrongPeer = try gate.begin(v.signed_request, peer: peer, now: v.now_ms, enrolled: key)
         XCTAssertThrowsError(try gate.consume(wrongPeer, peer: UUID(), now: v.now_ms))
+    }
+    func testPrototypeGateRefusesLegitimatelySignedLogonOrRealAccount() throws {
+        let v = try vector()
+        let key = try P256.Signing.PrivateKey(rawRepresentation: decodeHex(v.computer_private_scalar_hex_SYNTHETIC, count: 32))
+        for variant in 0..<3 {
+            var signed = v.signed_request
+            switch variant {
+            case 0: signed.request.purpose = "logon"
+            case 1: signed.request.account_sid = "S-1-5-21"
+            default: signed.request.account_name = "Real account"
+            }
+            signed.signature = hex(try key.signature(for: signed.request.canonical()).rawRepresentation)
+            try signed.validate(now: v.now_ms, enrolled: signed.computer_public_key)
+            var gate = ApprovalGate()
+            XCTAssertThrowsError(try gate.begin(signed, peer: UUID(), now: v.now_ms, enrolled: signed.computer_public_key))
+        }
     }
 }
