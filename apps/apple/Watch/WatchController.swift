@@ -119,10 +119,10 @@ final class WatchController: NSObject, ObservableObject, CBCentralManagerDelegat
             context.interactionNotAllowed = true
             authentication = context; phase = .authenticating; busy = true
             var error: NSError?
-            guard context.canEvaluatePolicy(.deviceOwnerWithWristDetection, error: &error) else {
+            guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithWristDetection, error: &error) else {
                 stop("Wrist authentication unavailable. Unlock and wear the Watch, then start again."); return
             }
-            context.evaluatePolicy(.deviceOwnerWithWristDetection, localizedReason: "Approve this authentication test") { [weak self] success, _ in
+            context.evaluatePolicy(.deviceOwnerAuthenticationWithWristDetection, localizedReason: "Approve this authentication test") { [weak self] success, _ in
                 DispatchQueue.main.async { self?.finishAuthentication(success, context: context, token: token, frozen: frozen, peer: peer) }
             }
         } catch { stop("Unpaired, invalid or expired challenge. Start again.") }

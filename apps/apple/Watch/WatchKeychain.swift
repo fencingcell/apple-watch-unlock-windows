@@ -2,12 +2,15 @@
 import Foundation
 import CryptoKit
 import Security
+import LocalAuthentication
 
 enum WatchKeychain {
     private static let service = "org.watchlogin.prototype.watch.pairing.v1"
     private static func query(_ name: String) -> [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
-         kSecAttrAccount as String: name, kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail]
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        return [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+                kSecAttrAccount as String: name, kSecUseAuthenticationContext as String: context]
     }
     static func read(_ name: String) throws -> Data? {
         var q = query(name); q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -23,7 +26,7 @@ enum WatchKeychain {
         let status = SecItemUpdate(q as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
             var item = q
-            item.removeValue(forKey: kSecUseAuthenticationUI as String)
+            item.removeValue(forKey: kSecUseAuthenticationContext as String)
             attributes.forEach { item[$0.key] = $0.value }
             let added = SecItemAdd(item as CFDictionary, nil)
             guard added == errSecSuccess else { throw KeychainFailure(status: added) }
