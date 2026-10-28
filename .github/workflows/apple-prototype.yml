@@ -1,0 +1,37 @@
+name: Apple prototype
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'apps/apple/**'
+      - 'protocol/**'
+      - 'scripts/Build-Apple.sh'
+      - '.github/workflows/apple-prototype.yml'
+permissions:
+  contents: read
+concurrency:
+  group: apple-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test-and-build:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record runner stable Xcode
+        run: |
+          xcode-select -p
+          xcodebuild -version
+          xcodebuild -showsdks
+      - name: Shared protocol and state tests
+        run: swift test --package-path apps/apple
+      - name: Install project generator
+        run: brew install xcodegen
+      - name: Build unsigned device applications and package
+        run: bash scripts/Build-Apple.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apple-prototype-unsigned
+          path: build/apple/artifacts/
+          if-no-files-found: error
+          retention-days: 7
