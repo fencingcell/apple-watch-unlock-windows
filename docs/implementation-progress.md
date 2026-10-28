@@ -5,7 +5,7 @@
 - Task 1 authentication protocol: complete at 6ad2891; independent spec and quality review passed. Auth 11/11 and backend regression 90/90 passed. Existing upstream watchd has three dead-code warnings.
 - Task 2 Apple app/build: complete at 03e20a4; independent spec/quality review passed. Cloud run 40632784401 passed 7 Swift tests, 2 Python tests and unsigned device build/package checks; IPA downloaded and independently inspected.
 - Task 3 Windows GATT probe/service: implementation, 18 probe tests, new-crate formatting/clippy and release build passed. Latest complete backend run has 110 passing tests including integration tests. Independent review found a service-data ownership issue; implementation now rejects untrusted existing roots and parent writes, and restores SYSTEM-only secret ACLs. Final independent re-review was interrupted by reviewer usage limits; parent inspected the fix, but does not label this an independent final approval.
-- Task 4 review/package: in progress; draft delivery only until final review and physical validation.
+- Task 4 review/package: draft PR #1 created; unsigned Apple package and Windows MSVC build available. Windows run 40686686593 passed all29 focused tests, release build and dependency notice export. Draft delivery only until final independent review and physical validation.
 - Hardware/Watch installation and actual cold-boot login: not tested.
 
 Read-only hardware query: this Windows x64 machine reports BLE, Central Role and Peripheral Role supported. This does not yet verify GATT availability in Session 0 before login.
