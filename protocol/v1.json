@@ -1,0 +1,36 @@
+{
+  "algorithm": "ECDSA P-256 with SHA-256; X9.63 uncompressed 65-byte public keys; IEEE P1363 64-byte signatures; lowercase hex",
+  "approval_signing_bytes_hex": "57415443482d4c4f47494e2d415050524f56414c2d563100bd7f60a50fce63bbae2f9a1b523652c7ad37d73cfc42e552d21d6c973414f07f",
+  "canonical_request_hex": "57415443482d4c4f47494e2d524551554553542d5631000100256b1be32745d1d1c9d49121cc87bc451c4f2dfa756d89b4c910afaeb6258ae00007532d312d302d3000000007abababababababababababababababababababababababababababababababab0000018bcfe5dd30000754657374205043001341757468656e7469636174696f6e2074657374",
+  "computer_fingerprint": "256b1be32745d1d1c9d49121cc87bc451c4f2dfa756d89b4c910afaeb6258ae0",
+  "computer_private_scalar_hex_SYNTHETIC": "0101010101010101010101010101010101010101010101010101010101010101",
+  "computer_public_key": "046ff03b949241ce1dadd43519e6960e0a85b41a69a05c328103aa2bce1594ca163c4f753a55bf01dc53f6c0b0c7eee78b40c6ff7d25a96e2282b989cef71c144a",
+  "now_ms": 1700000000000,
+  "protocol_version": 1,
+  "request_hash": "bd7f60a50fce63bbae2f9a1b523652c7ad37d73cfc42e552d21d6c973414f07f",
+  "signed_approval": {
+    "nonce": "abababababababababababababababababababababababababababababababab",
+    "request_hash": "bd7f60a50fce63bbae2f9a1b523652c7ad37d73cfc42e552d21d6c973414f07f",
+    "signature": "2c9be0354d6d82a8076f0ef0e9e51c4468e94f16a82f1b2dffe9f22c6242cc499fd32ee86afdfe2f51cf0db7a4809a2edcfb0ae5b2cb3f5fdf6278ae2fc7b08a",
+    "watch_public_key": "04550f471003f3df97c3df506ac797f6721fb1a1fb7b8f6f83d224498a65c88e24136093d7012e509a73715cbd0b00a3cc0ff4b5c01b3ffa196ab1fb327036b8e6"
+  },
+  "signed_request": {
+    "computer_public_key": "046ff03b949241ce1dadd43519e6960e0a85b41a69a05c328103aa2bce1594ca163c4f753a55bf01dc53f6c0b0c7eee78b40c6ff7d25a96e2282b989cef71c144a",
+    "request": {
+      "account_name": "Authentication test",
+      "account_sid": "S-1-0-0",
+      "computer_id": "256b1be32745d1d1c9d49121cc87bc451c4f2dfa756d89b4c910afaeb6258ae0",
+      "computer_name": "Test PC",
+      "expires_at_ms": 1700000030000,
+      "nonce": "abababababababababababababababababababababababababababababababab",
+      "protocol_version": 1,
+      "purpose": "probe",
+      "session_id": 7
+    },
+    "signature": "cf8d9c7f7b1be542ab44bdeacac28cdbf23441bb3892ce84976851f05dcb34808558c4f4587d15c3e0c6646f730870eaeb0dce1ade7d08f8de6e63b8eadf1006"
+  },
+  "warning": "SYNTHETIC TEST KEYS ONLY. Public private scalars below are not secrets; never use these keys for enrollment.",
+  "watch_fingerprint": "fe00ab0f341901f863a49160cf554588d6928282d531b799addc4123f45ce85a",
+  "watch_private_scalar_hex_SYNTHETIC": "0202020202020202020202020202020202020202020202020202020202020202",
+  "watch_public_key": "04550f471003f3df97c3df506ac797f6721fb1a1fb7b8f6f83d224498a65c88e24136093d7012e509a73715cbd0b00a3cc0ff4b5c01b3ffa196ab1fb327036b8e6"
+}
