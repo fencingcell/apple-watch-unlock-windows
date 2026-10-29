@@ -96,6 +96,9 @@ impl Drop for Session {
 }
 struct Shared {
     closing: AtomicBool,
+    first_read_seen: AtomicBool,
+    first_control_seen: AtomicBool,
+    first_approval_seen: AtomicBool,
     peers: Mutex<Peers>,
     sessions: Mutex<HashMap<String, Session>>,
     workers: Mutex<Vec<JoinHandle<()>>>,
@@ -134,6 +137,7 @@ impl Shared {
             GattSessionStatusChangedEventArgs,
         >::new(move |_, args| {
             if args.as_ref().and_then(|a| a.Status().ok()) != Some(GattSessionStatus::Active) {
+                crate::events::record("gatt_session=inactive; pending challenge cleared");
                 if let Some(shared) = weak.upgrade() {
                     if let Ok(mut peers) = shared.peers.lock() {
                         peers.remove(&callback_peer);
@@ -150,6 +154,7 @@ impl Shared {
                 peer: peer.clone(),
             },
         );
+        crate::events::record("gatt_session=active; fresh control session registered");
         Ok(peer)
     }
     fn spawn(self: &Arc<Self>, work: impl FnOnce(Arc<Self>) + Send + 'static) {
@@ -262,6 +267,10 @@ fn read_handler(
         let Some(args) = args else {
             return Ok(());
         };
+        let first_read = !shared.first_read_seen.swap(true, Ordering::Relaxed);
+        if first_read {
+            crate::events::record("gatt_read=received first=true");
+        }
         let guard = Complete(args.GetDeferral()?);
         let args = args.clone();
         shared.spawn(move |state| {
@@ -270,6 +279,9 @@ fn read_handler(
             let Ok(request) =
                 operation.and_then(|o| wait(o, Instant::now() + Duration::from_secs(2)))
             else {
+                if first_read {
+                    crate::events::record("gatt_read=request_unavailable first=true");
+                }
                 return;
             };
             let mut peer = None;
@@ -287,6 +299,9 @@ fn read_handler(
                 let result = request.RespondWithValue(&writer.DetachBuffer()?);
                 let _ = writer.Close();
                 result?;
+                if first_read {
+                    crate::events::record("gatt_read=response_complete first=true");
+                }
                 Ok(())
             })();
             if result.is_err() {
@@ -294,6 +309,9 @@ fn read_handler(
                     state.peers.lock().unwrap().remove(&peer);
                 }
                 let _ = request.RespondWithProtocolError(REJECT);
+                if first_read {
+                    crate::events::record("gatt_read=rejected first=true");
+                }
             }
         });
         Ok(())
@@ -307,6 +325,18 @@ fn write_handler(
         let Some(args) = args else {
             return Ok(());
         };
+        let seen = if control {
+            &shared.first_control_seen
+        } else {
+            &shared.first_approval_seen
+        };
+        if !seen.swap(true, Ordering::Relaxed) {
+            crate::events::record(if control {
+                "gatt_control=received first=true"
+            } else {
+                "gatt_approval=received first=true"
+            });
+        }
         let guard = Complete(args.GetDeferral()?);
         let args = args.clone();
         shared.spawn(move |state| {
@@ -339,6 +369,9 @@ fn write_handler(
                     ensure!(bytes == [1], "control must be 01");
                     state.start(&id, Instant::now())?;
                     request.Respond()?;
+                    crate::events::record(
+                        "challenge=created control_acknowledged=true purpose=probe",
+                    );
                     return Ok(false);
                 }
                 let mut peers = state.peers.lock().unwrap();
@@ -356,7 +389,11 @@ fn write_handler(
                         state.peers.lock().unwrap().remove(&peer);
                     }
                     let _ = request.RespondWithProtocolError(REJECT);
-                    crate::events::record("approval=rejected; fresh challenge required");
+                    crate::events::record(if control {
+                        "gatt_control=rejected; fresh challenge required"
+                    } else {
+                        "approval=rejected; fresh challenge required"
+                    });
                 }
             }
         });
@@ -404,6 +441,9 @@ pub fn run(
     );
     let shared = Arc::new(Shared {
         closing: AtomicBool::new(false),
+        first_read_seen: AtomicBool::new(false),
+        first_control_seen: AtomicBool::new(false),
+        first_approval_seen: AtomicBool::new(false),
         peers: Mutex::new(Peers::new(watch)),
         sessions: Mutex::new(HashMap::new()),
         workers: Mutex::new(Vec::new()),

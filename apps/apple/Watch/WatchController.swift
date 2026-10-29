@@ -8,13 +8,14 @@ import WatchConnectivity
 // CoreBluetooth callbacks use the main queue. Authentication and WCSession
 // callbacks explicitly re-enter that queue before touching protocol state.
 final class WatchController: NSObject, ObservableObject, CBCentralManagerDelegate, CBPeripheralDelegate, WCSessionDelegate {
-    struct Computer: Identifiable { let id: UUID; let name: String }
-    private enum Phase { case idle, connecting, services, characteristics, control, reading, ready, authenticating, writing }
+    struct Computer: Identifiable { let id: UUID; let name: String; let connectable: Bool? }
+    private enum Phase: String { case idle, connecting, services, characteristics, control, reading, ready, authenticating, writing }
     private static let service = CBUUID(string: "4c23b2b0-5d5b-4b24-9c50-43320a1b0001")
     private static let requestID = CBUUID(string: "4c23b2b0-5d5b-4b24-9c50-43320a1b0002")
     private static let approvalID = CBUUID(string: "4c23b2b0-5d5b-4b24-9c50-43320a1b0003")
     private static let controlID = CBUUID(string: "4c23b2b0-5d5b-4b24-9c50-43320a1b0004")
     @Published var status = "Scan to start an authentication test."
+    @Published var transportDiagnostic = "No connection callback yet."
     @Published var computers: [Computer] = []
     @Published var pending: SignedRequest?
     @Published var busy = false
@@ -51,7 +52,7 @@ final class WatchController: NSObject, ObservableObject, CBCentralManagerDelegat
         if value {
             do { enrollment = try WatchKeychain.enrollment(); try loadPublicKey(); publishPublicKey() }
             catch { stop("Unlock the Watch to access its local pairing keys.") }
-        } else { stop("Authentication cancelled because the app became inactive.") }
+        } else { stop("Authentication cancelled because the app became inactive [\(phase.rawValue)].") }
     }
     private func loadPublicKey() throws {
         let key = try WatchKeychain.signingKey()
@@ -76,9 +77,17 @@ final class WatchController: NSObject, ObservableObject, CBCentralManagerDelegat
         peripheral = nil; requestCharacteristic = nil; approvalCharacteristic = nil; controlCharacteristic = nil
         status = message
     }
+    // Show only bounded error metadata, never NSError.userInfo or peer identifiers.
+    private func errorCode(_ error: Error?) -> String {
+        guard let error else { return "no system error" }
+        let value = error as NSError
+        let domain = String(value.domain.filter { !$0.isWhitespace && !$0.isNewline }.prefix(80))
+        return "\(domain) code \(value.code)"
+    }
     func scan() {
         guard active, central.state == .poweredOn else { status = "Enable Bluetooth and keep this app active."; return }
         stop("Scanning for the fixed authentication-test service…")
+        transportDiagnostic = "Waiting for an advertisement."
         discovered = [:]; computers = []
         central.scanForPeripherals(withServices: [Self.service], options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
         scanDeadline = Timer.scheduledTimer(withTimeInterval: 15, repeats: false) { [weak self] _ in
@@ -89,13 +98,20 @@ final class WatchController: NSObject, ObservableObject, CBCentralManagerDelegat
         guard active, let selected = discovered[id] else { return }
         stop("Connecting…")
         peripheral = selected; selected.delegate = self; phase = .connecting; busy = true
+        transportDiagnostic = "connect requested; waiting for didConnect."
         central.connect(selected)
-        deadline = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { [weak self] _ in self?.stop("Connection or challenge timed out. Start again.") }
+        deadline = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.stop("Timed out [\(self.phase.rawValue)]. Start again.")
+        }
     }
     private func fetchChallenge() {
         guard active, let peripheral, peripheral.state == .connected, let controlCharacteristic else { stop("Connection unavailable."); return }
-        cancelPending(); phase = .control; busy = true; status = "Reading a fresh signed challenge…"
-        deadline = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { [weak self] _ in self?.stop("Challenge expired. Start again.") }
+        cancelPending(); phase = .control; busy = true; status = "Requesting a fresh signed challenge [control]…"
+        deadline = Timer.scheduledTimer(withTimeInterval: 30, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.stop("Challenge expired [\(self.phase.rawValue)]. Start again.")
+        }
         peripheral.writeValue(Data([1]), for: controlCharacteristic, type: .withResponse)
     }
     func confirmComputer() {
@@ -164,28 +180,34 @@ final class WatchController: NSObject, ObservableObject, CBCentralManagerDelegat
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
         guard active, phase == .idle, discovered[peripheral.identifier] == nil, computers.count < 30 else { return }
         discovered[peripheral.identifier] = peripheral
-        let name = peripheral.name ?? "Unnamed computer"
-        computers.append(Computer(id: peripheral.identifier, name: String(name.prefix(40))))
+        let name = peripheral.name ?? (advertisementData[CBAdvertisementDataLocalNameKey] as? String) ?? "Unnamed computer"
+        let connectable = (advertisementData[CBAdvertisementDataIsConnectable] as? NSNumber)?.boolValue
+        computers.append(Computer(id: peripheral.identifier, name: String(name.prefix(40)), connectable: connectable))
+        transportDiagnostic = "Advertisement received; select a computer."
     }
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        transportDiagnostic = "didConnect: active=\(active), expectedPeer=\(self.peripheral === peripheral), phase=\(phase.rawValue)"
         guard active, self.peripheral === peripheral, phase == .connecting else { central.cancelPeripheralConnection(peripheral); return }
-        phase = .services; peripheral.discoverServices([Self.service])
+        phase = .services; status = "Connected; discovering service [services]…"
+        peripheral.discoverServices([Self.service])
     }
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
-        if self.peripheral === peripheral { stop("Connection failed. Start again.") }
+        if self.peripheral === peripheral { stop("Connection failed [\(phase.rawValue)]: \(errorCode(error)).") }
     }
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        if self.peripheral === peripheral { stop("Connection lost. Pending authentication cancelled.") }
+        if self.peripheral === peripheral { stop("Connection lost [\(phase.rawValue)]: \(errorCode(error)). Pending authentication cancelled.") }
     }
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard active, self.peripheral === peripheral, phase == .services else { return }
-        guard error == nil, let service = peripheral.services?.first(where: { $0.uuid == Self.service }) else { stop("Required service unavailable."); return }
-        phase = .characteristics
+        transportDiagnostic = "didDiscoverServices: \(errorCode(error))"
+        guard error == nil, let service = peripheral.services?.first(where: { $0.uuid == Self.service }) else { stop("Required service unavailable [services]: \(errorCode(error))."); return }
+        phase = .characteristics; status = "Service found; discovering characteristics [characteristics]…"
         peripheral.discoverCharacteristics([Self.requestID, Self.approvalID, Self.controlID], for: service)
     }
     func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         guard active, self.peripheral === peripheral, phase == .characteristics, service.uuid == Self.service else { return }
-        guard error == nil else { stop("Characteristic discovery failed."); return }
+        transportDiagnostic = "didDiscoverCharacteristics: \(errorCode(error))"
+        guard error == nil else { stop("Characteristic discovery failed [characteristics]: \(errorCode(error))."); return }
         requestCharacteristic = service.characteristics?.first { $0.uuid == Self.requestID && $0.properties.contains(.read) }
         approvalCharacteristic = service.characteristics?.first { $0.uuid == Self.approvalID && $0.properties.contains(.write) }
         controlCharacteristic = service.characteristics?.first { $0.uuid == Self.controlID && $0.properties.contains(.write) }
@@ -195,9 +217,11 @@ final class WatchController: NSObject, ObservableObject, CBCentralManagerDelegat
     }
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
         guard active, self.peripheral === peripheral else { return }
-        guard error == nil else { stop("Transfer rejected. Start a fresh authentication test."); return }
+        guard error == nil else { stop("Transfer rejected [\(phase.rawValue)]: \(errorCode(error)). Start again."); return }
         if phase == .control, characteristic === controlCharacteristic, let requestCharacteristic {
             frames.start(peer: peripheral.identifier, now: now); phase = .reading
+            transportDiagnostic = "Control write acknowledged; reading challenge."
+            status = "Reading signed challenge frames [reading]…"
             peripheral.readValue(for: requestCharacteristic)
         } else if phase == .writing, characteristic === approvalCharacteristic {
             outgoingIndex += 1; writeNext()
@@ -205,8 +229,9 @@ final class WatchController: NSObject, ObservableObject, CBCentralManagerDelegat
     }
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         guard active, self.peripheral === peripheral, phase == .reading, characteristic === requestCharacteristic else { return }
+        guard error == nil else { stop("Challenge read failed [reading]: \(errorCode(error))."); return }
         do {
-            guard error == nil, let frame = characteristic.value else { throw ProtocolError.invalid }
+            guard let frame = characteristic.value else { throw ProtocolError.invalid }
             if let data = try frames.append(frame, peer: peripheral.identifier, now: now) {
                 let request = try JSONDecoder().decode(SignedRequest.self, from: data)
                 try request.validate(now: now)

@@ -13,8 +13,17 @@ struct WatchLoginApp: App {
                         Text(model.status)
                         Button("Scan for computers") { model.scan() }.disabled(model.busy)
                         ForEach(model.computers) { computer in
-                            Button(computer.name) { model.connect(computer.id) }.disabled(model.busy)
+                            Button { model.connect(computer.id) } label: {
+                                VStack(alignment: .leading) {
+                                    Text(computer.name)
+                                    Text("Connectable: \(computer.connectable.map { $0 ? "yes" : "no" } ?? "unknown")").font(.caption2)
+                                }
+                            }.disabled(model.busy)
                         }
+                    }
+                    Section("Bluetooth diagnostics · build 2") {
+                        Text(model.transportDiagnostic).font(.caption2)
+                        Text("Keep this app active and report the phase in square brackets if a test fails.").font(.caption2)
                     }
                     if let pending = model.pending {
                         Section("Signed request") {
