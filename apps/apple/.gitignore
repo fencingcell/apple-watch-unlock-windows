@@ -1,0 +1,6 @@
+.build/
+*.xcodeproj/
+Host/Info.plist
+Watch/Info.plist
+__pycache__/
+Tests/__pycache__/

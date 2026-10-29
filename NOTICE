@@ -1,0 +1,29 @@
+Watch Unlock Windows
+
+This work is a modified version of xiaoka520/watch-unlock-windows:
+https://github.com/xiaoka520/watch-unlock-windows
+Imported revision: 157f8eb38cc03514f4b01bdf75dd8397c6604a44
+
+It is distributed under the GNU Affero General Public License version 3
+(see LICENSE). Copyright notices of the original authors are preserved.
+
+Modified since 2026-10-24: separate application identity, multi-device
+proximity policy, DPAPI-encrypted secret storage, peer-verified credential
+IPC, one-time paired-device binding, an optional input-gated return unlock, and a
+Tauri desktop interface. Every source file in this repository may contain such
+modifications.
+
+The IRK verification code follows the algorithm used by watch-unlock-linux.
+Third-party trademarks remain the property of their respective owners.
+
+Imported on 2026-10-28 from whyy1/watch-unlock-windows:
+https://github.com/whyy1/watch-unlock-windows
+Revision: 0c16912d633ff0be94c4e99fbfbec32f52722a67
+
+Further prototype modifications for fencingcell/apple-watch-unlock-windows:
+mutually authenticated P-256 requests and approvals, an iPhone host and watchOS
+wrist-authentication app, unsigned cloud device builds, and a separate Windows
+BLE authentication probe/service. These components do not yet submit Windows
+credentials. The original provider is preserved. The derivative remains under
+GNU AGPL version 3; the destination repository's initial placeholder license
+does not replace the upstream license.

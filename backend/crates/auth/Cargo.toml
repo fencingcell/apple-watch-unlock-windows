@@ -1,0 +1,15 @@
+[package]
+name = "watch-unlock-auth"
+version = "0.1.0"
+edition = "2021"
+description = "Authenticated Watch Login v1 challenge protocol"
+license = "AGPL-3.0-only"
+
+[dependencies]
+hex = "0.4"
+p256 = { version = "0.13", features = ["ecdsa"] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+
+[dev-dependencies]
+serde_json = "1"

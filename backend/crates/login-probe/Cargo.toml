@@ -1,0 +1,15 @@
+[package]
+name = "watch-login-probe"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+description = "Authenticated Apple Watch BLE probe; no Windows logon submission"
+
+[dependencies]
+watch-unlock-auth = { path = "../auth" }
+anyhow = "1"
+hex = "0.4"
+serde_json = "1"
+zeroize = "1"
+windows = { version = "0.58", features = ["Foundation", "Devices_Bluetooth", "Devices_Bluetooth_GenericAttributeProfile", "Devices_Radios", "Storage_Streams", "Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Cryptography", "Win32_System_Threading", "Win32_System_RemoteDesktop", "Win32_System_Memory", "Win32_System_WinRT", "Win32_System_Console", "Win32_System_Services", "Win32_Storage_FileSystem"] }
+
