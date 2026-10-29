@@ -8,7 +8,7 @@
 
 Apple 工作流生成 `WatchLogin-unsigned.ipa`。这是包含 Watch App 的真机目标安装包，需要先用自己的 Apple 账户签名。云端构建不需要 Apple 账户、证书或密码。
 
-- [本次已通过的 Apple 构建](https://github.com/fencingcell/apple-watch-unlock-windows/actions/runs/40632784401)，产物名 `apple-prototype-unsigned`。
+- [1.0.1 / build 2 蓝牙诊断构建](https://github.com/fencingcell/apple-watch-unlock-windows/actions/runs/40868182856)，产物名 `apple-prototype-unsigned`；实际构建结果见随包的验证状态。
 - 解压产物后，`SHA256SUMS` 可核对安装包和构建报告。
 - Windows 产物中的 `watch-login-probe.exe` 用于下面的命令；在解压目录中打开 PowerShell。
 
@@ -16,7 +16,9 @@ Apple 官方说明免费 Personal Team 的描述文件会在签发 7 天后到�
 
 ## 2. 签名和安装
 
-用户已通过 iPhone 上的“全能签”安装本次 App，iPhone 和 Watch 均可打开，Watch 公钥已传至手机。这是一次实际安装记录；尚未确认所用证书类型、有效期及到期后的续签方式，不能据此保证每 7 天免费重签可用。无需为了后面的通信测试重新安装已能运行的 App。
+用户已通过 iPhone 上的“全能签”安装初版 App，iPhone 和 Watch 均可打开，Watch 公钥已传至手机。这是一次实际安装记录；尚未确认所用证书类型、有效期及到期后的续签方式，不能据此保证每 7 天免费重签可用。
+
+本次诊断需要更新两端 App。先记下手表完整公钥指纹，再使用原有全能签路线签名新的 IPA，尽量沿用原证书与 Bundle ID，以更新方式安装。不要点手表的密钥重置按钮。更新后确认手表出现 **Bluetooth diagnostics · build 2**，并重新比对 Watch enrollment 指纹；如果指纹改变，旧登记不能继续使用，需要重新核对并登记。若安装工具要求先删除旧 App，先记录提示再决定，删除可能影响本地身份。
 
 ### 先前调查的 Windows 社区路线（未在本设备验证）
 
@@ -45,7 +47,7 @@ Apple 官方说明免费 Personal Team 的描述文件会在签发 7 天后到�
 
 `doctor` 只查询蓝牙能力。保存 `show-identity` 显示的完整电脑 SHA-256 指纹。
 
-本机开发验证目前在自定义 128 位服务 UUID 广播时持续得到 `Aborted`，即使 BLE / Peripheral Role 查询为真。16 位标准服务可在约 250 毫秒后恢复到 `Started`；项目 UUID 的最小 WinRT 程序持续 10 秒未启动。原因仍未定位，详见 [蓝牙诊断记录](bluetooth-advertising-diagnostics.md)。若 `serve` 等待后仍报广播启动失败，保留 `doctor` 和完整错误输出；此时没有可供 Watch 连接的广播，后面的配对测试尚不能进行。
+本机自定义 UUID 广播与 ASUS 后台广播的共存尚未稳定解决；经用户批准临时暂停两项相关服务后，完整程序可 `Started` 并被手表扫描到，但连接 / 挑战阶段仍超时。关闭适配器省电的对照没有解决问题，设置已恢复。详见 [蓝牙诊断记录](bluetooth-advertising-diagnostics.md)。若 `serve` 等待后仍报广播启动失败，保留 `doctor` 和完整错误输出；此时没有可供 Watch 连接的广播，后面的配对测试尚不能进行。不要自行永久关闭其他服务。
 
 运行测试服务：
 
@@ -70,6 +72,8 @@ Apple 官方说明免费 Personal Team 的描述文件会在签发 7 天后到�
 ```
 
 检查手表显示的电脑、`Authentication test` 账户和会话。点击 **Allow authentication test**。Windows 必须报告 `approval=validated enrolled_watch=true purpose=probe logon_submitted=false`；Watch 完成蓝牙写入本身不能证明 Windows 接受了签名。
+
+测试期间保持 Watch App 活动；放下手腕或屏幕变暗导致 App inactive 时，程序会取消待处理认证。build 2 在错误信息的方括号内显示阶段：`connecting` 是等待连接，`services` / `characteristics` 是发现服务 / 特征，`control` 是等待挑战控制写入确认，`reading` 是读取挑战。失败时记录完整状态和 Bluetooth diagnostics 的最后事件；扫描项的 Connectable 只是广告元数据，不能证明电脑身份。Windows 的 `first=true` 日志指本次运行首次回调；`gatt_read=response_complete` 只表示一个 ATT 读取响应完成，不等于完整签名挑战传输成功。
 
 更换公钥、重装导致身份变化或重置手表密钥后，都需要重新逐字比较并登记。原型在 Watch 上一次只固定一台电脑。删除前台 Watch 登记：
 
