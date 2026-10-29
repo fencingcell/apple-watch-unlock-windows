@@ -2,9 +2,9 @@ name: Windows authentication probe
 on:
   workflow_dispatch:
   push:
-    paths: ['backend/crates/auth/**', 'backend/crates/login-probe/**', 'backend/Cargo.*', 'scripts/Export-ThirdPartyNotices.ps1', '.github/workflows/windows-prototype.yml']
+    paths: ['backend/crates/auth/**', 'backend/crates/login-probe/**', 'backend/Cargo.*', 'scripts/*Probe*.ps1', 'scripts/tests/**', 'scripts/Export-ThirdPartyNotices.ps1', '.github/workflows/windows-prototype.yml']
   pull_request:
-    paths: ['backend/crates/auth/**', 'backend/crates/login-probe/**', 'backend/Cargo.*', 'scripts/Export-ThirdPartyNotices.ps1', '.github/workflows/windows-prototype.yml']
+    paths: ['backend/crates/auth/**', 'backend/crates/login-probe/**', 'backend/Cargo.*', 'scripts/*Probe*.ps1', 'scripts/tests/**', 'scripts/Export-ThirdPartyNotices.ps1', '.github/workflows/windows-prototype.yml']
 permissions:
   contents: read
 concurrency:
@@ -16,6 +16,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7.0.1
+      - name: Directory race and privileged pin fixtures (no service installation)
+        run: ./scripts/tests/Probe-DirectorySafety.Tests.ps1 -FixtureParent $env:RUNNER_TEMP -RequirePrivilegedTests
       - name: Select stable Rust MSVC
         run: rustup default stable-x86_64-pc-windows-msvc
       - name: Fetch locked workspace metadata dependencies

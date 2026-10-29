@@ -9,6 +9,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $serviceName = 'WatchLoginProbe'
+. (Join-Path $PSScriptRoot 'Probe-DirectorySafety.ps1')
 function Assert-NoReparse([string]$Path) {
     $next = [IO.Path]::GetFullPath($Path)
     while ($next) {
@@ -44,7 +45,7 @@ function Set-ProtectedAcl([string]$Path,[string[]]$Rules) {
 }
 function Assert-TrustedDirectory([string]$Path) {
     Assert-NoReparse $Path
-    if (!(Test-Path -LiteralPath $Path)) { return }
+    if (!(Test-Path -LiteralPath $Path -PathType Container)) { throw "Required directory is missing: $Path" }
     $acl = Get-Acl -LiteralPath $Path
     $owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
     if ($owner -notin @('S-1-5-18','S-1-5-32-544')) { throw "Untrusted directory owner: $Path" }
@@ -53,6 +54,20 @@ function Assert-TrustedDirectory([string]$Path) {
         $sid = $rule.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
         if ($rule.AccessControlType -eq 'Allow' -and ($rule.FileSystemRights -band $write) -and $sid -notin @('S-1-5-18','S-1-5-32-544')) { throw "Untrusted writable directory: $Path" }
     }
+}
+function Add-ProbeOwnedDirectory([string]$Path,[string]$Descriptor,[Collections.Generic.List[IDisposable]]$Pins,[switch]$PrivateChild) {
+    $created=$false
+    if (!(Test-Path -LiteralPath $Path)) {
+        # Fail closed on ALREADY_EXISTS: never adopt a directory/junction that won
+        # the gap between this observation and the exclusive native create.
+        New-ProbeDirectoryExclusive $Path $Descriptor
+        $created=$true
+    }
+    $Pins.Add((Open-ProbePinnedDirectory $Path -BackupAccess:$PrivateChild))
+    if (!$PrivateChild) { Assert-TrustedDirectory $Path }
+    # PrivateChild is permitted only immediately below the already pinned,
+    # validated data root; its SYSTEM-only ACL need not be weakened to pin it.
+    return $created
 }
 $install = [IO.Path]::GetFullPath($InstallDirectory).TrimEnd('\')
 $expected = [IO.Path]::GetFullPath((Join-Path $env:ProgramFiles 'WatchLoginProbe')).TrimEnd('\')
@@ -63,14 +78,34 @@ $public = Join-Path $data 'public'
 $dataMarker = Join-Path $data 'probe-data-owned.txt'
 $source = [IO.Path]::GetFullPath($Executable)
 foreach ($path in @($install,$data,$secrets,$public,$source)) { Assert-NoReparse $path }
-# Markers alone never establish ownership: a normal user can forge marker contents.
-foreach ($path in @($install,$data,$public)) { Assert-TrustedDirectory $path }
 if (!(Test-Path -LiteralPath $source -PathType Leaf) -or [IO.Path]::GetExtension($source) -ne '.exe') { throw 'Executable must be an existing EXE' }
 $destination = Join-Path $install 'watch-login-probe.exe'
 if ($source -eq $destination) { throw 'Supply a built EXE outside the install directory' }
 $binaryPath = '"' + $destination + '" service'
 $existing = Get-CimInstance Win32_Service -Filter "Name='WatchLoginProbe'"
 if ($existing -and ($existing.PathName -ne $binaryPath -or $existing.StartName -ne 'LocalSystem')) { throw 'Existing service is not this owned LocalSystem probe' }
+$pins=[Collections.Generic.List[IDisposable]]::new()
+try {
+# Pin ancestors root-first, then acquire all owned directories before any prompt.
+# Protected owner/DACL are present from creation; there is no permissive window.
+Add-ProbeAncestorPins $install $pins
+Add-ProbeAncestorPins $data $pins
+$publicDescriptor='O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;GRGX;;;BU)'
+$privateDescriptor='O:BAG:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)'
+$newInstall=Add-ProbeOwnedDirectory $install $publicDescriptor $pins
+$newData=Add-ProbeOwnedDirectory $data $publicDescriptor $pins
+$marker = Join-Path $install 'probe-service-owned.txt'
+foreach($entry in @(@($marker,'WatchLoginProbe-v1',$newInstall),@($dataMarker,'WatchLoginProbe-data-v1',$newData))) {
+    $path,$content,$created=$entry
+    Assert-NoReparse $path
+    if($created) {
+        # A safely created root is ours even if the user later cancels enrollment.
+        $stream=[IO.File]::Open($path,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+        try {$bytes=[Text.Encoding]::ASCII.GetBytes($content);$stream.Write($bytes,0,$bytes.Length)} finally {$stream.Dispose()}
+    } elseif (!(Test-Path -LiteralPath $path -PathType Leaf) -or [IO.File]::ReadAllText($path) -ne $content) { throw 'Unrecognized owned directory marker' }
+}
+[void](Add-ProbeOwnedDirectory $public $publicDescriptor $pins)
+[void](Add-ProbeOwnedDirectory $secrets $privateDescriptor $pins -PrivateChild)
 $watchHex = $null
 if ($WatchPublicKeyFile) {
     $watchPath = [IO.Path]::GetFullPath($WatchPublicKeyFile); Assert-NoReparse $watchPath
@@ -88,27 +123,10 @@ if ($WatchPublicKeyFile) {
     Write-Host "Compare the Watch key fingerprint with the Watch/iPhone display: $fingerprint"
     if ((Read-Host 'Type the complete matching fingerprint to enroll for the SYSTEM service') -cne $fingerprint) { throw 'Fingerprint not confirmed' }
 }
-# Existing directories must carry our marker; never claim another application's files.
-$marker = Join-Path $install 'probe-service-owned.txt'
-if (Test-Path -LiteralPath $install) {
-    Assert-NoReparse $marker
-    if (!(Test-Path -LiteralPath $marker -PathType Leaf) -or [IO.File]::ReadAllText($marker) -ne 'WatchLoginProbe-v1') { throw 'Unrecognized install directory' }
-}
-if (Test-Path -LiteralPath $data) {
-    Assert-NoReparse $dataMarker
-    if (!(Test-Path -LiteralPath $dataMarker -PathType Leaf) -or [IO.File]::ReadAllText($dataMarker) -ne 'WatchLoginProbe-data-v1') { throw 'Unrecognized service data directory' }
-}
+# Revalidate after the potentially unbounded prompt. Pins remain held, preventing
+# path replacement; no marker or ownership normalization can authorize new roots.
+foreach($path in @($install,$data,$public)) { Assert-TrustedDirectory $path }
 if ($existing) { Stop-Service -Name $serviceName; (Get-Service -Name $serviceName).WaitForStatus('Stopped',[TimeSpan]::FromSeconds(30)) }
-foreach ($path in @($install,$data)) {
-    if (!(Test-Path -LiteralPath $path)) {
-        [void][IO.Directory]::CreateDirectory($path)
-        Set-ProtectedAcl $path @('S-1-5-18:FullControl','S-1-5-32-544:FullControl','S-1-5-32-545:ReadAndExecute')
-        Invoke-Icacls @($path,'/setowner','*S-1-5-32-544')
-        if (@(Get-ChildItem -LiteralPath $path -Force).Count -ne 0) { throw 'New application root was unexpectedly populated' }
-    }
-}
-# Protected parent roots prevent ordinary users from creating/replacing children.
-foreach ($path in @($secrets,$public)) { if (!(Test-Path -LiteralPath $path)) { [void][IO.Directory]::CreateDirectory($path) } }
 # Validate owned descendants before ACL/copy operations.
 foreach ($path in @($destination,$marker,(Join-Path $public 'computer-public-key.txt'))) { Assert-NoReparse $path }
 Set-ProtectedAcl $install @('S-1-5-18:FullControl','S-1-5-32-544:FullControl','S-1-5-32-545:ReadAndExecute')
@@ -148,3 +166,6 @@ Invoke-Sc @('description',$serviceName,'Signed Watch authentication probe only. 
 Write-Host 'Installed automatic SYSTEM probe. Service identity is separate from foreground identity; pair its computer fingerprint explicitly on the Watch.'
 Write-Host 'After first service start: watch-login-probe show-identity --service-data. Diagnostics: ProgramData\WatchLoginProbe\public\service-events.log (bounded 64 KiB, UTC milliseconds and actual process session). Enroll/update only public Watch key with this script; no user DPAPI blob is copied.'
 if ($Start) { Start-Service -Name $serviceName }
+} finally {
+    for($i=$pins.Count-1;$i -ge 0;$i--) {$pins[$i].Dispose()}
+}
