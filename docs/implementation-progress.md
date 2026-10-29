@@ -1,5 +1,13 @@
 # Implementation progress
 
+2026-10-29 update: user installed both apps using the iPhone signing tool “全能签”; iOS 27.2, Watch Series 9 / watchOS 27.0. Screenshots establish app launch and public-key transfer to the phone. Certificate type, expiry, renewal and physical wrist-policy behavior remain unverified. No Watch key has been trusted from the screenshot alone.
+
+Installer race/path replacement hardening is committed at local 4cd3aed / remote 86ea594. Windows CI run 40826541975 passed seven isolated directory fixtures, including the positive elevated SYSTEM-only directory pin case, and all 29 existing focused Rust tests plus release build and license export. Final independent spec and quality re-review of 4cd3aed / cd8cacb passed; the previous P1 is closed.
+
+Advertising diagnosis now distinguishes 16-bit standard service recovery (initial Aborted, Started at about 250 ms) from persistent failure of custom 128-bit service advertising over ten seconds. A bounded standalone diagnostic example and three startup regression tests were added at cd8cacb / remote f81df2e; production startup now tolerates a transient Aborted within its fixed deadline. Local focused tests are 32/32; Windows CI run 40831045900 passed, including separate release builds for the probe and diagnostic. This does not establish custom-service operation. A temporary short Bluetooth display-name comparison is awaiting user action; see bluetooth-advertising-diagnostics.md. No service or credential provider has been installed.
+
+The following entries are historical checkpoints.
+
 2026-10-28: User approved starting. Dedicated clone in the task work directory; feature branch starts at approved upstream revision 0c16912. Initial cloud destination unavailable: GitHub connector currently lists no repositories. Portable local Rust/LLVM tools are being prepared outside the source tree.
 
 - Task 1 authentication protocol: complete at 6ad2891; independent spec and quality review passed. Auth 11/11 and backend regression 90/90 passed. Existing upstream watchd has three dead-code warnings.

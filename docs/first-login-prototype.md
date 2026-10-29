@@ -2,7 +2,7 @@
 
 这是验证阶段。预期流程是：打开 Watch 上的 Login Test，确认电脑身份，点击 **Allow authentication test**，由 Windows 验证签名并报告通过。成功仍不会进入 Windows 桌面；密码登记和首次登录集成尚未启用。
 
-目标设备：iPhone iOS 27.0.1（用户可能升级到 27.2）、Apple Watch Series 9 / watchOS 27.0、Windows x64。操作系统升级后应重跑安装和佩戴状态测试。
+目标设备：iPhone iOS 27.2、Apple Watch Series 9 / watchOS 27.0、Windows x64。用户已在 2026-10-29 确认两端 App 能打开。操作系统升级后应重跑安装和佩戴状态测试。
 
 ## 1. 获取安装包
 
@@ -14,7 +14,11 @@ Apple 工作流生成 `WatchLogin-unsigned.ipa`。这是包含 Watch App 的真�
 
 Apple 官方说明免费 Personal Team 的描述文件会在签发 7 天后到期，需要重新配置和安装。该规则说明免费签名的期限，不能证明某个 Windows 工具支持嵌入的 Watch App。见 [Apple 账户说明](https://developer.apple.com/help/account/basics/about-your-developer-account)。
 
-## 2. 在 Windows 上尝试签名和安装
+## 2. 签名和安装
+
+用户已通过 iPhone 上的“全能签”安装本次 App，iPhone 和 Watch 均可打开，Watch 公钥已传至手机。这是一次实际安装记录；尚未确认所用证书类型、有效期及到期后的续签方式，不能据此保证每 7 天免费重签可用。无需为了后面的通信测试重新安装已能运行的 App。
+
+### 先前调查的 Windows 社区路线（未在本设备验证）
 
 目前找到的是 **iLoader 社区 Watch/RSD 分支**。上游相关 [PR #740](https://github.com/nab138/iloader/pull/740) 已关闭且未合并；作者记录 Windows + iOS 27.0 + Watch Ultra 1 / watchOS 26.6 安装成功，也明确说明没有建立 watchOS 27 兼容性。
 
@@ -41,7 +45,7 @@ Apple 官方说明免费 Personal Team 的描述文件会在签发 7 天后到�
 
 `doctor` 只查询蓝牙能力。保存 `show-identity` 显示的完整电脑 SHA-256 指纹。
 
-本机开发验证目前在启动广播时得到 `Aborted`，即使 BLE / Peripheral Role 查询为真。独立的最小 WinRT 发布程序也出现相同结果，原因仍未定位。如果 `serve` 报 `advertising aborted`，先保留 `doctor` 和完整错误输出；此时没有可供 Watch 连接的广播，后面的配对测试尚不能进行。不要把这个结果记为蓝牙互通通过。
+本机开发验证目前在自定义 128 位服务 UUID 广播时持续得到 `Aborted`，即使 BLE / Peripheral Role 查询为真。16 位标准服务可在约 250 毫秒后恢复到 `Started`；项目 UUID 的最小 WinRT 程序持续 10 秒未启动。原因仍未定位，详见 [蓝牙诊断记录](bluetooth-advertising-diagnostics.md)。若 `serve` 等待后仍报广播启动失败，保留 `doctor` 和完整错误输出；此时没有可供 Watch 连接的广播，后面的配对测试尚不能进行。
 
 运行测试服务：
 
@@ -92,7 +96,7 @@ Apple 官方说明免费 Personal Team 的描述文件会在签发 7 天后到�
 
 ## 5. 开机服务测试
 
-先通过前台测试，再在管理员 PowerShell 中安装测试服务：
+先通过前台测试并完成独立代码复审，再在管理员 PowerShell 中安装测试服务。`Probe-DirectorySafety.ps1` 必须与安装脚本放在同一目录：
 
 ```powershell
 .\Install-ProbeService.ps1 -Executable .\watch-login-probe.exe -WatchPublicKeyFile .\watch-public-key.txt -Start
@@ -112,4 +116,4 @@ Apple 官方说明免费 Personal Team 的描述文件会在签发 7 天后到�
 
 ## 接入首次登录之前
 
-需要先取得三项证据：目标设备的免费签名安装 / 续签成功；佩戴解锁与摘下锁定的认证结果符合预期；开机登录前的 SYSTEM 服务能收到有效批准。之后再实现 Windows 账户登记、受保护的凭据存储和登录组件通信，并确认本地 / Microsoft 账户类型。首次登录与固件启动前的 BitLocker 解锁是不同阶段，本方案的目标是 Windows 登录界面。
+需要先取得三项证据：目标设备的安装、签名有效期及续签方式确认可用；佩戴解锁与摘下锁定的认证结果符合预期；开机登录前的 SYSTEM 服务能收到有效批准。之后再实现 Windows 账户登记、受保护的凭据存储和登录组件通信，并确认本地 / Microsoft 账户类型。首次登录与固件启动前的 BitLocker 解锁是不同阶段，本方案的目标是 Windows 登录界面。
