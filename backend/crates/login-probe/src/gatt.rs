@@ -455,26 +455,21 @@ pub fn run(
     let start_deadline = Instant::now() + Duration::from_secs(10);
     loop {
         let status = window.provider.AdvertisementStatus()?;
-        if matches!(
+        if startup_ready(
             status,
-            GattServiceProviderAdvertisementStatus::Started
-                | GattServiceProviderAdvertisementStatus::StartedWithoutAllAdvertisementData
-        ) {
+            STOP.load(Ordering::Acquire),
+            Instant::now(),
+            start_deadline,
+        )
+        .map_err(|failure| {
+            anyhow::anyhow!(
+                "{failure}; last Bluetooth error={}",
+                bluetooth_error(*error.lock().unwrap())
+            )
+        })? {
             crate::events::record(&format!("advertising={status:?}"));
             break;
         }
-        if status == GattServiceProviderAdvertisementStatus::Aborted {
-            // Status can become visible before the event's diagnostic arrives.
-            std::thread::sleep(Duration::from_millis(100));
-            bail!(
-                "advertising aborted: {}",
-                bluetooth_error(*error.lock().unwrap())
-            );
-        }
-        ensure!(
-            !STOP.load(Ordering::Acquire) && Instant::now() < start_deadline,
-            "advertising did not start"
-        );
         std::thread::sleep(Duration::from_millis(50));
     }
     ready()?;
@@ -507,6 +502,26 @@ pub fn run(
     Ok(())
 }
 
+fn startup_ready(
+    status: GattServiceProviderAdvertisementStatus,
+    stopped: bool,
+    now: Instant,
+    deadline: Instant,
+) -> Result<bool> {
+    ensure!(!stopped, "advertising startup cancelled");
+    ensure!(
+        now < deadline,
+        "advertising did not start before deadline: {status:?}"
+    );
+    // Windows can briefly report Aborted before Started (observed at 250 ms).
+    // Keep waiting within the same fixed window; never call ready before Started.
+    Ok(matches!(
+        status,
+        GattServiceProviderAdvertisementStatus::Started
+            | GattServiceProviderAdvertisementStatus::StartedWithoutAllAdvertisementData
+    ))
+}
+
 fn bluetooth_error(error: Option<BluetoothError>) -> &'static str {
     match error {
         Some(BluetoothError::Success) => "Success",
@@ -520,5 +535,68 @@ fn bluetooth_error(error: Option<BluetoothError>) -> &'static str {
         Some(BluetoothError::ConsentRequired) => "ConsentRequired",
         Some(BluetoothError::TransportNotSupported) => "TransportNotSupported",
         _ => "unavailable",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn initial_aborted_can_recover_before_ready() {
+        let now = Instant::now();
+        let deadline = now + Duration::from_secs(10);
+        assert!(!startup_ready(
+            GattServiceProviderAdvertisementStatus::Aborted,
+            false,
+            now,
+            deadline
+        )
+        .unwrap());
+        assert!(startup_ready(
+            GattServiceProviderAdvertisementStatus::Started,
+            false,
+            now + Duration::from_millis(250),
+            deadline
+        )
+        .unwrap());
+    }
+
+    #[test]
+    fn persistent_failure_is_bounded_by_deadline() {
+        let now = Instant::now();
+        assert!(startup_ready(
+            GattServiceProviderAdvertisementStatus::Aborted,
+            false,
+            now,
+            now
+        )
+        .is_err());
+        assert!(startup_ready(
+            GattServiceProviderAdvertisementStatus::Created,
+            false,
+            now,
+            now
+        )
+        .is_err());
+        assert!(startup_ready(
+            GattServiceProviderAdvertisementStatus::Started,
+            false,
+            now,
+            now
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn cancellation_never_reports_ready() {
+        let now = Instant::now();
+        for status in [
+            GattServiceProviderAdvertisementStatus::Created,
+            GattServiceProviderAdvertisementStatus::Started,
+            GattServiceProviderAdvertisementStatus::StartedWithoutAllAdvertisementData,
+        ] {
+            assert!(startup_ready(status, true, now, now + Duration::from_secs(10)).is_err());
+        }
     }
 }
